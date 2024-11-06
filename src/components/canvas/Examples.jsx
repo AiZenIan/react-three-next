@@ -16,7 +16,8 @@ export const Blob = ({ route = '/', ...props }) => {
       onClick={() => router.push(route)}
       onPointerOver={() => hover(true)}
       onPointerOut={() => hover(false)}
-      {...props}>
+      {...props}
+    >
       <sphereGeometry args={[1, 64, 64]} />
       <MeshDistortMaterial roughness={0.5} color={hovered ? 'hotpink' : '#1fb2f5'} />
     </mesh>
@@ -54,133 +55,52 @@ export const Logo = ({ route = '/blob', ...props }) => {
   )
 }
 
-export function Duck(props) {
-  const { scene } = useGLTF('/duck.glb')
+export const Cubes = (props) => {
+  const mesh = useRef()
+  const timeRef = useRef(0)
 
-  useFrame((state, delta) => (scene.rotation.y += delta))
+  // Initialize the MarchingCubes effect using useMemo
+  const effect = useMemo(() => {
+    const material = new THREE.MeshPhongMaterial({
+      color: 0x8e13ed,
+      specular: 0x0099ff,
+      shininess: 100,
+    })
+    const marchingCubes = new MarchingCubes(28, material, true, true, 100000)
+    marchingCubes.position.set(0, 0, 0)
+    marchingCubes.scale.set(2, 2, 2)
+    marchingCubes.enableUvs = false
+    marchingCubes.enableColors = false
+    marchingCubes.isolation = 80
+    return marchingCubes
+  }, [])
 
-  return <primitive object={scene} {...props} />
-}
-export function Dog(props) {
-  const { scene } = useGLTF('/dog.glb')
+  // Animation loop using useFrame
+  useFrame((state, delta) => {
+    timeRef.current += delta * 2
+    effect.reset()
 
-  return <primitive object={scene} {...props} />
-}
+    const numblobs = 8
+    const subtract = 12
+    const strength = 1.2 / ((Math.sqrt(numblobs) - 1) / 4 + 1)
 
-
-export function Galaxy() {
-  // Load the shape texture
-  const shape = useLoader(THREE.TextureLoader, './models/particleShape/1.png')
-
-  // Galaxy parameters
-  const parameters = {
-    count: 70000,
-    size: 0.01,
-    radius: 5,
-    branches: 8,
-    spin: 1,
-    randomness: 0.3,
-    randomnessPower: 5,
-    stars: 9000,
-    starColor: '#1b3984',
-    insideColor: '#ff6030',
-    outsideColor: '#1b3984',
-  }
-
-  // Generate galaxy positions and colors
-  const galaxyData = useMemo(() => {
-    const positions = new Float32Array(parameters.count * 3)
-    const colors = new Float32Array(parameters.count * 3)
-
-    const colorInside = new THREE.Color(parameters.insideColor)
-    const colorOutside = new THREE.Color(parameters.outsideColor)
-
-    for (let i = 0; i < parameters.count; i++) {
-      const radius = Math.random() * parameters.radius
-      const spinAngle = radius * parameters.spin
-      const branchAngle = ((i % parameters.branches) / parameters.branches) * Math.PI * 2
-
-      const randomX =
-        Math.pow(Math.random(), parameters.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * parameters.randomness
-      const randomY =
-        Math.pow(Math.random(), parameters.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * parameters.randomness
-      const randomZ =
-        Math.pow(Math.random(), parameters.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * parameters.randomness
-
-      positions[i * 3 + 0] = Math.cos(branchAngle + spinAngle) * radius + randomX
-      positions[i * 3 + 1] = randomY
-      positions[i * 3 + 2] = Math.sin(branchAngle + spinAngle) * radius + randomZ
-
-      const mixedColor = colorInside.clone()
-      mixedColor.lerp(colorOutside, radius / parameters.radius)
-
-      colors[i * 3 + 0] = mixedColor.r
-      colors[i * 3 + 1] = mixedColor.g
-      colors[i * 3 + 2] = mixedColor.b
+    // Add metaballs to the effect
+    for (let i = 0; i < numblobs; i++) {
+      const ballx = Math.sin(i + 1.26 * timeRef.current * (1.03 + 0.5 * Math.cos(0.21 * i))) * 0.37 + 0.5
+      const bally = Math.abs(Math.cos(i + 1.12 * timeRef.current * Math.cos(1.22 + 0.1424 * i))) * 0.77
+      const ballz = Math.cos(i + 1.32 * timeRef.current * 0.1 * Math.sin(0.92 + 0.53 * i)) * 0.27 + 0.5
+      effect.addBall(ballx, bally, ballz, strength, subtract)
     }
 
-    return { positions, colors }
-  }, [parameters])
+    effect.update()
 
-  // Generate background stars positions
-  const bgStarsPositions = useMemo(() => {
-    const positions = new Float32Array(parameters.stars * 3)
-
-    for (let i = 0; i < parameters.stars; i++) {
-      positions[i * 3 + 0] = (Math.random() - 0.5) * 20
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 20
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 20
+    // Rotate the mesh
+    if (mesh.current) {
+      mesh.current.rotation.y = Math.sin(timeRef.current * 0.5) * (Math.PI / 8)
+      mesh.current.rotation.x = Math.cos(timeRef.current * 0.5) * (Math.PI / 8)
     }
-
-    return positions
-  }, [parameters.stars])
-
-  // Create Points objects
-  const galaxyPoints = useMemo(() => {
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(galaxyData.positions, 3))
-    geometry.setAttribute('color', new THREE.BufferAttribute(galaxyData.colors, 3))
-    const material = new THREE.PointsMaterial({
-      size: parameters.size,
-      sizeAttenuation: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      vertexColors: true,
-      transparent: true,
-      alphaMap: shape,
-      alphaTest: 0.001,
-    })
-    return new THREE.Points(geometry, material)
-  }, [galaxyData, parameters.size, shape])
-
-  const bgStars = useMemo(() => {
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(bgStarsPositions, 3))
-    const material = new THREE.PointsMaterial({
-      size: parameters.size,
-      sizeAttenuation: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      color: parameters.starColor,
-      transparent: true,
-      alphaMap: shape,
-      alphaTest: 0.001,
-    })
-    return new THREE.Points(geometry, material)
-  }, [bgStarsPositions, parameters.size, parameters.starColor, shape])
-
-  // Rotate the galaxy and stars
-  useFrame(() => {
-    galaxyPoints.rotation.y += 0.0005
-    bgStars.rotation.y += 0.0001
   })
 
-  return (
-    <>
-      {/* Background Stars */}
-      <primitive object={bgStars} />
-      {/* Galaxy */}
-      <primitive object={galaxyPoints} />
-    </>
-  )
+  // Return the primitive component
+  return <primitive ref={mesh} object={effect} {...props} />
 }
